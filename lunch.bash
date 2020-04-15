@@ -1,4 +1,4 @@
 #!/bin/bash
-cd ${WORK_DIR}
+cd ${EXTHM_SOURCE_PATH}
 . build/envsetup.sh
 lunch exthm_${TARGET_CODE_NAME}-userdebug

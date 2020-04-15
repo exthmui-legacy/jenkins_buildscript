@@ -1,5 +1,5 @@
 #!/bin/bash
-cd ${WORK_DIR}
+cd ${EXTHM_SOURCE_PATH}
 . build/envsetup.sh
 rm out/target/product/${TARGET_CODE_NAME}/exthm-*.zip
 #rm out/target/product/${TARGET_CODE_NAME}/*.img
