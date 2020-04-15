@@ -14,19 +14,19 @@ pipeline {
         EXTHM_SOURCE_PATH = "${EXTHM_SOURCE_BASEPATH}/exthm-${TARGET_VERSION}"
     }
     stages {
-        stage('Sync Projects') {
-            steps {
-                checkout scm
-            }
-        }
         stage('Build') {
             steps {
-                sh label: '', script: 'bash ./build.bash'
+                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
+                                                  . build/envsetup.sh
+                                                  rm out/target/product/${TARGET_CODE_NAME}/exthm-*.zip
+                                                  lunch exthm_${TARGET_CODE_NAME}-userdebug
+                                                  mka bacon -j${BUILD_THREADS}"'''
             }
         }
         stage('Upload') {
             steps {
-                sh label: '', script: 'bash ./upload.bash'
+                sh label: '', script: '''bash -c "mkdir out
+                                                  cp ${EXTHM_SOURCE_PATH}/out/target/product/${TARGET_CODE_NAME}/exthm-*.zip ./out"'''
             }
         }
     }

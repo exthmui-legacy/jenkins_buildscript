@@ -8,14 +8,11 @@ pipeline {
         EXTHM_SOURCE_PATH = "${EXTHM_SOURCE_BASEPATH}/exthm-${TARGET_VERSION}"
     }
     stages {
-        stage('Sync Projects') {
-            steps {
-                checkout scm
-            }
-        }
         stage('Lunch') {
             steps {
-                sh label: '', script: 'bash ./lunch.bash'
+                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
+                                                  . build/envsetup.sh
+                                                  lunch exthm_${TARGET_CODE_NAME}-userdebug"'''
             }
         }
     }

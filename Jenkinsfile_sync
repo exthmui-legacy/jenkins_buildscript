@@ -10,8 +10,8 @@ pipeline {
     stages {
         stage('Sync Projects') {
             steps {
-                checkout scm
-                sh label: '', script: 'bash ./sync.bash'
+                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
+                                                  repo sync --force-sync"'''
             }
         }
     }
