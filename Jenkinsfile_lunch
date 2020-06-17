@@ -4,7 +4,6 @@ pipeline {
     }
 
     environment {
-        TARGET_CODE_NAME = sh label: '', returnStdout: true, script: 'echo -n $JOB_NAME | sed "s/^exTHmUI-//g"'
         EXTHM_SOURCE_PATH = "${EXTHM_SOURCE_BASEPATH}/exthm-${TARGET_VERSION}"
     }
     stages {
