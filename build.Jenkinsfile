@@ -17,7 +17,8 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}. build/envsetup.sh
+                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
+                . build/envsetup.sh
                 rm out/target/product/${TARGET_CODE_NAME}/exthm-*.zip
                 lunch exthm_${TARGET_CODE_NAME}-${TARGET_VARIANT}
                 mka bacon -j${BUILD_THREADS}"'''
