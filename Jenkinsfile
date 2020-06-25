@@ -7,6 +7,7 @@ pipeline {
         choice(name:'EXTHM_COMPILERTYPE',choices:'OFFICIAL\nUNOFFICIAL',description:'Type of compiler')
         choice(name:'EXTHM_BUILDTYPE',choices:'SNAPSHOT\nALPHA\nBETA\nRELEASE',description:'Type of this build')
         string(name:'BUILD_THREADS',description:'The number of threads',defaultValue:'16')
+        choice(name:'TARGET_VARIANT',choices:'userdebug\neng\nuser',description:'Type of compiler')
     }
 */
     environment {
@@ -16,17 +17,16 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
-                                                  . build/envsetup.sh
-                                                  rm out/target/product/${TARGET_CODE_NAME}/exthm-*.zip
-                                                  lunch exthm_${TARGET_CODE_NAME}-userdebug
-                                                  mka bacon -j${BUILD_THREADS}"'''
+                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}. build/envsetup.sh
+                rm out/target/product/${TARGET_CODE_NAME}/exthm-*.zip
+                lunch exthm_${TARGET_CODE_NAME}-${TARGET_VARIANT}
+                mka bacon -j${BUILD_THREADS}"'''
             }
         }
         stage('Upload') {
             steps {
                 sh label: '', script: '''bash -c "mkdir out
-                                                  cp ${EXTHM_SOURCE_PATH}/out/target/product/${TARGET_CODE_NAME}/exthm-*.zip ./out"'''
+                cp ${EXTHM_SOURCE_PATH}/out/target/product/${TARGET_CODE_NAME}/exthm-*.zip ./out"'''
             }
         }
     }

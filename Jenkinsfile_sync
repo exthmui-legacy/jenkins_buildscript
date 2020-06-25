@@ -11,7 +11,7 @@ pipeline {
         stage('Sync Projects') {
             steps {
                 sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
-                                                  repo sync --force-sync"'''
+                repo sync --force-sync"'''
             }
         }
     }

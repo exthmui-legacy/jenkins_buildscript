@@ -10,8 +10,8 @@ pipeline {
         stage('Lunch') {
             steps {
                 sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
-                                                  . build/envsetup.sh
-                                                  lunch exthm_${TARGET_CODE_NAME}-userdebug"'''
+                . build/envsetup.sh
+                lunch exthm_${TARGET_CODE_NAME}-${TARGET_VARIANT}"'''
             }
         }
     }
