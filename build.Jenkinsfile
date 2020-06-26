@@ -1,3 +1,7 @@
+def bash(cmd, returnStdout) {
+    return sh (script: '#!/bin/bash -e\n'+ cmd, returnStdout: returnStdout)
+}
+
 pipeline {
     agent {
         label "$AGENT_LABEL"
@@ -11,8 +15,8 @@ pipeline {
     }
 */
     environment {
-        TARGET_MANUFACTOR = sh label: '', returnStdout: true, script: 'echo -n $JOB_NAME | sed -r "s/^exTHmUI_(.[a-z0-9]+)-.[a-z0-9]+$/\\1/"'
-        TARGET_CODE_NAME = sh label: '', returnStdout: true, script: 'echo -n $JOB_NAME | sed -r "s/^exTHmUI_.[a-z0-9]+-(.[a-z0-9]+)$/\\1/"'
+        TARGET_MANUFACTOR = bash ('echo -n $JOB_NAME | sed -r "s/^exTHmUI_(.[a-z0-9]+)-.[a-z0-9]+$/\\1/"', true)
+        TARGET_CODE_NAME = bash ('echo -n $JOB_NAME | sed -r "s/^exTHmUI_.[a-z0-9]+-(.[a-z0-9]+)$/\\1/"', true)
         EXTHM_SOURCE_PATH = "${EXTHM_SOURCE_BASEPATH}/exthm-${TARGET_VERSION}"
         EXTHM_TREES_PATH = "${EXTHM_TREES_BASEPATH}/exthm-${TARGET_VERSION}"
         DEPENDENCIES_FILE_NAME = "exthm.dependencies"
@@ -20,111 +24,133 @@ pipeline {
     stages {
         stage('Link trees to source') {
             steps {
-                sh label: '', script: '''bash -c "
-                                linkDeps() {
-                                    local dependency_path=\\$(echo \\${1} | sed \\\"s/\\\\/\\\$//g\\\")
-                                    rm -rf ${EXTHM_SOURCE_PATH}/\\${dependency_path} &&
-                                    mkdir -p ${EXTHM_SOURCE_PATH}/\\${dependency_path} &&
-                                    rm -rf ${EXTHM_SOURCE_PATH}/\\${dependency_path} &&
-                                    ln -s -f ${EXTHM_TREES_PATH}/\\${dependency_path} ${EXTHM_SOURCE_PATH}/\\${dependency_path}
-                                    if [ \\${?} -eq 0 ]
+                bash ("""
+                                func_linkDeps() {
+                                    local dependency_path=\$(echo \${1} | sed 's#/\$##g')
+                                    rm -rf ${EXTHM_SOURCE_PATH}/\${dependency_path} &&
+                                    mkdir -p ${EXTHM_SOURCE_PATH}/\${dependency_path} &&
+                                    rm -rf ${EXTHM_SOURCE_PATH}/\${dependency_path} &&
+                                    ln -s -f ${EXTHM_TREES_PATH}/\${dependency_path} ${EXTHM_SOURCE_PATH}/\${dependency_path}
+                                    if [ \${?} -eq 0 ]
                                     then
-                                        echo \\\"${EXTHM_TREES_PATH}/\\${dependency_path} has successfully linked to ${EXTHM_SOURCE_PATH}/\\${dependency_path}\\\"
+                                        echo \""${EXTHM_TREES_PATH}/\${dependency_path} has successfully linked to ${EXTHM_SOURCE_PATH}/\${dependency_path}\""
                                     else
-                                        echo \\\"ln has exited with return \\${?},exiting...\\\"
-                                        return \\${?}
+                                        echo \"ln has exited with return \${?},exiting...\"
+                                        return \${?}
                                     fi
-                                    echo \\\"Looking for dependencies in \\${dependency_path}\\\"
-                                    if [ -f \\\"${EXTHM_SOURCE_PATH}/\\${dependency_path}/${DEPENDENCIES_FILE_NAME}\\\" ]
+                                    echo \"Looking for dependencies in \${dependency_path}\"
+                                    if [ -f \"${EXTHM_SOURCE_PATH}/\${dependency_path}/${DEPENDENCIES_FILE_NAME}\" ]
                                     then
-                                        echo \\\"Dependencies found, linking dependencies.\\\"
-                                        local target_paths=\\$(jq -r .[].target_path \\\"${EXTHM_SOURCE_PATH}/\\${dependency_path}/${DEPENDENCIES_FILE_NAME}\\\")
-                                        for target_path in \\${target_paths}
+                                        echo \"Dependencies found, linking dependencies.\"
+                                        tmp=\$(jq -r .[].target_path \"${EXTHM_SOURCE_PATH}/\${dependency_path}/${DEPENDENCIES_FILE_NAME}\")
+                                        if [ \${?} -ne 0 ]
+                                        then
+                                            echo \"jq has exited with \${?}, exiting...\"
+                                            return \${?}
+                                        fi
+                                        local target_paths=\${tmp}
+                                        for target_path in \${target_paths}
                                         do
-                                            if [ -d \\\"${EXTHM_TREES_PATH}/\\${target_path}\\\" ]
+                                            if [[ ! "\${target_path}" =~ ^[0-9a-zA-Z_/-]{1,}\$ ]]
                                             then
-                                                if [[ \\\"\\${target_path}\\\" =~ ^device/ ]] || [[ \\\"\\${target_path}\\\" =~ ^kernel/ ]] || [[ \\\"\\${target_path}\\\" =~ ^vendor/ ]]
+                                                echo \"Path \${target_path} in dependencies file is not allowed! Exiting...\"
+                                                return 1
+                                            fi
+                                            if [ -d \"${EXTHM_TREES_PATH}/\${target_path}\" ] 
+                                            then
+                                                if [[ \"\${target_path}\" =~ ^device/ ]] || [[ \"\${target_path}\" =~ ^kernel/ ]] || [[ \"\${target_path}\" =~ ^vendor/ ]]
                                                 then
-                                                    linkDeps \\${target_path}
-                                                    if [ \\${?} -ne 0 ]
+                                                    func_linkDeps \${target_path}
+                                                    if [ \${?} -ne 0 ]
                                                     then
-                                                        echo \\\"linkDeps has exited with \\${?}, exiting...\\\"
-                                                        return \\${?}
+                                                        echo \"func_linkDeps has exited with \${?}, exiting...\"
+                                                        return \${?}
                                                     fi
                                                 else
-                                                    echo \\\"warn: \\${target_path} is not started from device/,kernel/ or vendor/, ignoring...\\\"
+                                                    echo \"warn: \${target_path} is not started from device/,kernel/ or vendor/, ignoring...\"
                                                 fi
                                             else
-                                                echo \\\"warn: \\${target_path} not found, ignoring...\\\"
+                                                echo \"warn: \${target_path} not found, ignoring...\"
                                             fi
                                         done
                                     else
-                                            echo \\\"No dependency found in \\${dependency_path}\\\"
+                                            echo \"No dependency found in \${dependency_path}\"
                                     fi
                                     return 0
                                 }
 
-                                linkDeps \\\"device/${TARGET_MANUFACTOR}/${TARGET_CODE_NAME}\\\"
-                                "'''
+                                func_linkDeps \"device/${TARGET_MANUFACTOR}/${TARGET_CODE_NAME}\"
+                                """, false)
             }
         }
         stage('Build') {
             steps {
-                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
+                bash ("""cd ${EXTHM_SOURCE_PATH}
                                 . build/envsetup.sh
-                                rm out/target/product/${TARGET_CODE_NAME}/exthm-*.zip
+                                rm -rf out/target/product/${TARGET_CODE_NAME}/exthm-*.zip
                                 lunch exthm_${TARGET_CODE_NAME}-${TARGET_VARIANT}
-                                mka bacon -j${BUILD_THREADS}"'''
+                                mka bacon -j${BUILD_THREADS}""", false)
             }
         }
         stage('Upload') {
             steps {
-                sh label: '', script: '''bash -c "mkdir out
-                                cp ${EXTHM_SOURCE_PATH}/out/target/product/${TARGET_CODE_NAME}/exthm-*.zip ./out"'''
+                bash ("""mkdir out
+                                cp ${EXTHM_SOURCE_PATH}/out/target/product/${TARGET_CODE_NAME}/exthm-*.zip ./out""", false)
             }
         }
     }
 
     post {
         always {
-            sh label: '', script: '''bash -c "
-                            unlinkDeps() {
-                                local dependency_path=\\$(echo \\${1} | sed \\\"s/\\\\/\\\$//g\\\")
-                                echo \\\"Looking for dependencies in \\${dependency_path}\\\"
-                                if [ -f \\\"${EXTHM_SOURCE_PATH}/\\${dependency_path}/${DEPENDENCIES_FILE_NAME}\\\" ]
+            bash ("""
+                            func_unlinkDeps() {
+                                local dependency_path=\$(echo \${1} | sed 's#/\$##g')
+                                echo \"Looking for dependencies in \${dependency_path}\"
+                                if [ -f \"${EXTHM_SOURCE_PATH}/\${dependency_path}/${DEPENDENCIES_FILE_NAME}\" ]
                                 then
-                                    echo \\\"Dependencies found, removing dependencies.\\\"
-                                    local target_paths=\\$(jq -r .[].target_path \\\"${EXTHM_SOURCE_PATH}/\\${dependency_path}/${DEPENDENCIES_FILE_NAME}\\\")
-                                    for target_path in \\${target_paths}
+                                    echo \"Dependencies found, removing dependencies.\"
+                                    tmp=\$(jq -r .[].target_path \"${EXTHM_SOURCE_PATH}/\${dependency_path}/${DEPENDENCIES_FILE_NAME}\")
+                                    if [ \${?} -ne 0 ]
+                                    then
+                                        echo \"jq has exited with \${?}, exiting...\"
+                                        return \${?}
+                                    fi
+                                    local target_paths=\${tmp}
+                                    for target_path in \${target_paths}
                                     do
-                                        if [[ \\\"\\${target_path}\\\" =~ ^device/ ]] || [[ \\\"\\${target_path}\\\" =~ ^kernel/ ]] || [[ \\\"\\${target_path}\\\" =~ ^vendor/ ]]
+                                        if [[ ! "\${target_path}" =~ ^[0-9a-zA-Z_/-]{1,}\$ ]]
                                         then
-                                            unlinkDeps \\${target_path}
-                                            if [ \\${?} -ne 0 ]
+                                            echo \"Path \${target_path} in dependencies file is not allowed! Exiting...\"
+                                            return 1
+                                        fi
+                                        if [[ \"\${target_path}\" =~ ^device/ ]] || [[ \"\${target_path}\" =~ ^kernel/ ]] || [[ \"\${target_path}\" =~ ^vendor/ ]]
+                                        then
+                                            func_unlinkDeps \${target_path}
+                                            if [ \${?} -ne 0 ]
                                             then
-                                                echo \\\"unlinkDeps has exited with \\${?}, please contact with system administrator\\\"
-                                                return \\${?}
+                                                echo \"func_unlinkDeps has exited with \${?}, please contact with system administrator\"
+                                                return \${?}
                                             fi
                                         else
-                                            echo \\\"warn: \\${target_path} is not started from device/,kernel/ or vendor/, ignoring...\\\"
+                                            echo \"warn: \${target_path} is not started from device/,kernel/ or vendor/, ignoring...\"
                                         fi
                                     done
                                 else
-                                    echo \\\"No dependency found in \\${dependency_path}\\\"
+                                    echo \"No dependency found in \${dependency_path}\"
                                 fi
-                                rm -rf ${EXTHM_SOURCE_PATH}/\\${dependency_path}
-                                if [ \\${?} -eq 0 ]
+                                rm -f ${EXTHM_SOURCE_PATH}/\${dependency_path}
+                                if [ \${?} -eq 0 ]
                                 then
-                                    echo \\\"link ${EXTHM_SOURCE_PATH}/\\${dependency_path} has successfully removed\\\"
+                                    echo \"link ${EXTHM_SOURCE_PATH}/\${dependency_path} has successfully removed\"
                                 else
-                                    echo \\\"rm has exited with \\${?}, please contact with system administrator\\\"
-                                    return \\${?}
+                                    echo \"rm has exited with \${?}, please contact with system administrator\"
+                                    return \${?}
                                 fi
                                 return 0
                             }
 
-                            unlinkDeps \\\"device/${TARGET_MANUFACTOR}/${TARGET_CODE_NAME}\\\"
-                            "'''
+                            func_unlinkDeps \"device/${TARGET_MANUFACTOR}/${TARGET_CODE_NAME}\"
+                            """, false)
             archiveArtifacts artifacts: 'out/*', onlyIfSuccessful: true
             cleanWs()
         }

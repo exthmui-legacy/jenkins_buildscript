@@ -1,3 +1,7 @@
+def bash(cmd, returnStdout) {
+    return sh (script: '#!/bin/bash -e\n'+ cmd, returnStdout: returnStdout)
+}
+
 pipeline {
     agent {
         label "$AGENT_LABEL"
@@ -11,64 +15,75 @@ pipeline {
     stages {
         stage('Have a breakfast') {
             steps {
-                sh label: '', script: '''bash -c "cd ${EXTHM_SOURCE_PATH}
+                bash ("""cd ${EXTHM_SOURCE_PATH}
                 . build/envsetup.sh
-                breakfast ${TARGET_CODE_NAME}"'''
+                breakfast ${TARGET_CODE_NAME}""", false)
                 echo 'Delicious!'
             }
         }
         stage('Move dishes to kitchen') {
             steps {
-                sh label: '', script: '''bash -c \"
-                                        moveDeps() {
-                                            local dependency_path=\\$(echo \\${1} | sed \\\"s/\\\\/\\\$//g\\\")
-                                            echo \\\"Looking for dependencies in \\${dependency_path}\\\"
-                                            if [ -f \\\"${EXTHM_SOURCE_PATH}/\\${dependency_path}/${DEPENDENCIES_FILE_NAME}\\\" ]
+                bash ("""
+                                        func_moveDeps() {
+                                            local dependency_path=\$(echo \${1} | sed 's#/\$##g')
+                                            echo \"Looking for dependencies in \${dependency_path}\"
+                                            if [ -f \"${EXTHM_SOURCE_PATH}/\${dependency_path}/${DEPENDENCIES_FILE_NAME}\" ]
                                             then
-                                                echo \\\"Dependencies found, moving dependencies.\\\"
-                                                local target_paths=\\$(jq -r .[].target_path \\\"${EXTHM_SOURCE_PATH}/\\${dependency_path}/${DEPENDENCIES_FILE_NAME}\\\")
-                                                for target_path in \\${target_paths}
+                                                echo \"Dependencies found, moving dependencies.\"
+                                                tmp=\$(jq -r .[].target_path \"${EXTHM_SOURCE_PATH}/\${dependency_path}/${DEPENDENCIES_FILE_NAME}\")
+                                                if [ \${?} -ne 0 ]
+                                                then
+                                                    echo \"jq has exited with \${?}, exiting...\"
+                                                    return \${?}
+                                                fi
+                                                local target_paths=\${tmp}
+                                                for target_path in \${target_paths}
                                                 do
-                                                    if [ -d \\\"${EXTHM_SOURCE_PATH}/\\${target_path}\\\" ]
+                                                    if [[ ! "\${target_path}" =~ ^[0-9a-zA-Z_/-]{1,}\$ ]]
                                                     then
-                                                        if [[ \\\"\\${target_path}\\\" =~ ^device/ ]] || [[ \\\"\\${target_path}\\\" =~ ^kernel/ ]] || [[ \\\"\\${target_path}\\\" =~ ^vendor/ ]]
+                                                        echo \"Path \${target_path} in dependencies file is not allowed! Exiting...\"
+                                                        return 1
+                                                    fi
+                                                    if [ -d \"${EXTHM_SOURCE_PATH}/\${target_path}\" ]
+                                                    then
+                                                        if [[ \"\${target_path}\" =~ ^device/ ]] || [[ \"\${target_path}\" =~ ^kernel/ ]] || [[ \"\${target_path}\" =~ ^vendor/ ]]
                                                         then
-                                                            moveDeps \\${target_path}
-                                                            if [ \\${?} -ne 0 ]
+                                                            func_moveDeps \${target_path}
+                                                            if [ \${?} -ne 0 ]
                                                             then
-                                                                echo \\\"moveDeps has exited with \\${?}, exiting...\\\"
-                                                                return \\${?}
+                                                                echo \"func_moveDeps has exited with \${?}, exiting...\"
+                                                                return \${?}
                                                             fi
                                                         else
-                                                            echo \\\"warn: \\${target_path} is not started from device/,kernel/ or vendor/, ignoring...\\\"
+                                                            echo \"warn: \${target_path} is not started from device/,kernel/ or vendor/, ignoring...\"
                                                         fi
                                                     else
-                                                        echo \\\"warn: \\${target_path} not found, ignoring...\\\"
+                                                        echo \"warn: \${target_path} not found, ignoring...\"
                                                     fi
                                                 done
                                             else
-                                                echo \\\"No dependency found in \\${dependency_path}\\\"
+                                                echo \"No dependency found in \${dependency_path}\"
                                             fi
-                                            rm -rf ${EXTHM_TREES_PATH}/\\${dependency_path} &&
-                                            mkdir -p ${EXTHM_TREES_PATH}/\\${dependency_path} &&
-                                            rm -rf ${EXTHM_TREES_PATH}/\\${dependency_path} &&
-                                            mv ${EXTHM_SOURCE_PATH}/\\${dependency_path} ${EXTHM_TREES_PATH}/\\${dependency_path}
-                                            if [ \\${?} -eq 0 ]
+                                            rm -rf ${EXTHM_TREES_PATH}/\${dependency_path} &&
+                                            mkdir -p ${EXTHM_TREES_PATH}/\${dependency_path} &&
+                                            rm -rf ${EXTHM_TREES_PATH}/\${dependency_path} &&
+                                            mv ${EXTHM_SOURCE_PATH}/\${dependency_path} ${EXTHM_TREES_PATH}/\${dependency_path}
+                                            if [ \${?} -eq 0 ]
                                             then
-                                                echo \\\"${EXTHM_SOURCE_PATH}/\\${dependency_path} has successfully moved to ${EXTHM_TREES_PATH}/\\${dependency_path}\\\"
+                                                echo \"${EXTHM_SOURCE_PATH}/\${dependency_path} has successfully moved to ${EXTHM_TREES_PATH}/\${dependency_path}\"
                                             else
-                                                echo \\\"mv has exited with return \\${?}, exiting...\\\"
-                                                return \\${?}
+                                                echo \"mv has exited with return \${?}, exiting...\"
+                                                return \${?}
                                             fi
                                             return 0
                                         }
 
-                                        moveDeps "device/${TARGET_MANUFACTOR}/${TARGET_CODE_NAME}"
+                                        func_moveDeps "device/${TARGET_MANUFACTOR}/${TARGET_CODE_NAME}"
                                         for i in ${EXTHM_TREES_PATH}/{device,kernel,vendor}/*
                                         do
-                                            rm -rf \\$(echo \\$i | sed \\"s#^${EXTHM_TREES_PATH}#${EXTHM_SOURCE_PATH}#g\\")
+                                            rm -rf \$(echo \$i | sed 's#^${EXTHM_TREES_PATH}#${EXTHM_SOURCE_PATH}#g')
                                         done
-                                        \"'''
+                                        """, false)
             }
         }
     }
